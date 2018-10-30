@@ -1,0 +1,59 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amsthm,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{physics}
+\usepackage{halloweenmath}
+\usepackage[font=small,labelfont=bf]{caption}
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+
+\newenvironment{part}[2][Part]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+%If you want to title your bold things something different just make another thing exactly like this but replace "problem" with the name of the thing you want, like theorem or lemma or whatever
+
+\newenvironment{writeup}[2][Write-Up]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+
+\graphicspath{ {./} }
+
+\begin{document}
+
+%\renewcommand{\qedsymbol}{\filledbox}
+%Good resources for looking up how to do stuff:
+%Binary operators: http://www.access2science.com/latex/Binary.html
+%General help: http://en.wikibooks.org/wiki/LaTeX/Mathematics
+%Or just google stuff
+
+\title{$\mathwitch$ AST 522: HW1 $\mathwitch$}
+\author{Jonas Powell}
+\maketitle
+
+
+
+
+\bigskip
+\bigskip
+\textbf{Parts E}\\
+\bigskip
+
+What is the separation, in meters, between these dishes? How well can you know
+this value? What are the limiting factors on the accuracy with which you can know, and
+how does this impact the precision with which you can determine the answer?
+Observations with the VLBA are conducted at GHz frequencies, $\lambda \approx 10$ cm.
+
+\bigskip
+
+
+Limiting factors: bad error propagation (not propagating through the actual angle calculation equation), measurement error, assumption of spherical Earth, neglecting different physical altitudes
+
+\bigskip
+
+Angular resolution uncertainties go as $\lambda/D \approx 1.59 \times 10^{-3}$ radians
+
+
+\bigskip
+\bigskip
+
+\end{document}
