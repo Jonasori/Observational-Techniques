@@ -1,4 +1,6 @@
-"""Observational Techniques, PS 1."""
+"""Observational Techniques, PS 1.
+https://moodle1819.wesleyan.edu/pluginfile.php/268955/mod_resource/content/0/hw1.pdf
+"""
 
 import numpy as np
 import matplotlib.pyplot as plt
