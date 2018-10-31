@@ -85,7 +85,7 @@ def get_relativistic_stuff(v_sat, h_sat):
 
     special_stuff = v_sat**2 / (2 * c**2) * secs_to_years
     general_stuff = G.value * M_earth.value * c**(-2) * \
-        (1/R_earth.value - 1/(R_earth.value + h_sat)) * secs_to_years
+        (1/(R_earth.value + h_sat) - 1/R_earth.value) * secs_to_years
 
     all_stuff = (special_stuff + general_stuff)
 
