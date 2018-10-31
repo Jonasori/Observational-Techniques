@@ -1,4 +1,5 @@
 """Observational Techniques, PS 1.
+
 https://moodle1819.wesleyan.edu/pluginfile.php/268955/mod_resource/content/0/hw1.pdf
 """
 
@@ -12,10 +13,12 @@ pos1 = [19.80159, 155.45581]
 pos2 = [17.75652, 64.58376]
 
 
-### PART A ###
+# PART A
 def find_distance(pos1, pos2, to_return='arc'):
-    """Blah.
-    pos1, pos2 (tuple): Lat, Long in decimal degrees.
+    """Find the physical distance (in meters) between two points.
+
+    Args:
+        pos1, pos2 (tuples): Lat, Long in decimal degrees.
     """
     # https://en.wikipedia.org/wiki/Propagation_of_uncertainty
     phi1, lam1 = pos1
@@ -27,7 +30,8 @@ def find_distance(pos1, pos2, to_return='arc'):
     lam2 *= np.pi/180
     d_lam = abs(lam2 - lam1)
 
-    d_sig = np.arccos(np.sin(phi1) * np.sin(phi2) + np.cos(phi1) * np.cos(phi2) * np.cos(d_lam))
+    d_sig = np.arccos(np.sin(phi1) * np.sin(phi2) +
+                      np.cos(phi1) * np.cos(phi2) * np.cos(d_lam))
     sig_error = 0.1 * np.pi/180
 
     error_angle, error_radius = 1e-5, 0
@@ -44,57 +48,74 @@ def find_distance(pos1, pos2, to_return='arc'):
     else:
         return "Invalid return request; choose 'arc', 'cord', or 'angle'."
 
+
 find_distance(pos1, pos2, to_return='arc')
 find_distance(pos1, pos2, to_return='cord')
 find_distance(pos1, pos2, to_return='angle')
 
 
 def find_angres_error(lam, sig_lam, d, sig_d):
+    """Find the angular resolution and its error.
+
+    Args:
+        lam (float): Wavelength of observation, in meters.
+        sig_lam (float): Variance of wavelength.
+        d (float): Baseline length.
+        sig_d (float): Variance of baseline length.
+    """
     theta = lam/d
     sig_theta = theta * np.sqrt((sig_lam/lam)**2 + (sig_d/d)**2)
-    return sig_theta
-
-find_angres_error(0.1, 0, r_earth, find_distance(pos1, pos2)[1])
+    return [theta, sig_theta]
 
 
-
-### PART B ###
-def get_photon_delay(sig, declination):
-    """Blah.
-
-    sig (float): angle of separation between coordinates
-    """
-    cord = find_distance(pos1, pos2, return_cord)[0]
-    dt = d/c
+d = find_distance(pos1, pos2, to_return='cord')[0]
+sig_d = find_distance(pos1, pos2, to_return='cord')[1]
+find_angres_error(0.1, 0, d, sig_d)
 
 
-
-### PROBLEM 2 ###
+# PROBLEM 2
 def get_relativistic_stuff(v_sat, h_sat):
-    special_stuff = v_sat**2 / (2 * c**2)
-    general_stuff = G.value * M_earth.value * c**(-2) * (1/R_earth.value - 1/(R_earth.value + h_sat))
-    all_stuff = special_stuff + general_stuff
-    all_stuff = all_stuff * np.pi * 1e7
+    """Calculate the relativistic goodness.
+
+    Args:
+        v_sat (float): The satellite's angular velocity, in meters per seconds.
+        h_sat (float): The satellite's altitude (height), in meters.
+    """
+    secs_to_years = 60*60*24*365
+
+    special_stuff = v_sat**2 / (2 * c**2) * secs_to_years
+    general_stuff = G.value * M_earth.value * c**(-2) * \
+        (1/R_earth.value - 1/(R_earth.value + h_sat)) * secs_to_years
+
+    all_stuff = (special_stuff + general_stuff)
+
+    print "Special Stuff:", special_stuff
+    print "General Stuff:", general_stuff
     return all_stuff
+
 
 h_sat = 540 * 1e3
 period = 95 * 60 + 28
-v_sat = h_sat/period
 sat_circumference = 2 * np.pi * (r_earth + h_sat)
+v_sat = sat_circumference/period
 get_relativistic_stuff(v_sat, h_sat)
 
 
 def get_final_time_delay(t=3600):
+    """Calculate the time delay for light reaching our two observatories."""
     R = R_earth.value
     H = 5.4e5
     alt = 4205
 
     theta_MK = 2 * np.pi * t/86400
     theta_HST_dt = 2 * np.pi * t/5728
-    theta_HST = 2*np.pi - ((np.pi/2) + np.arccos(R_earth.value/(R_earth.value + H)) + theta_HST_dt)
+    theta_HST = 2*np.pi - ((np.pi/2) +
+                           np.arccos(R_earth.value/(R_earth.value + H)) +
+                           theta_HST_dt)
     theta_i = theta_MK + theta_HST
 
-    alpha = np.arctan((R + alt) * np.sin(theta_i) / (R + H - (R + alt) * np.cos(theta_i)))
+    alpha = np.arctan((R + alt) *
+                      np.sin(theta_i) / (R + H - (R + alt) * np.cos(theta_i)))
     theta = alpha + theta_HST - np.pi/2
     l = (R + H - (R + alt) * np.cos(theta_i))/(np.cos(alpha))
 
@@ -105,11 +126,18 @@ def get_final_time_delay(t=3600):
 
 get_final_time_delay()
 
+l_delays, t_delays = [], []
+ts = np.arange(10, 7000, 50)
+for dt in ts:
+    l_delays.append(get_final_time_delay(t=dt)[0])
+    t_delays.append(get_final_time_delay(t=dt)[1])
 
 
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.plot(ts, l_delays)
+ax2.plot(ts, t_delays)
 
-
-
+plt.show()
 
 
 
