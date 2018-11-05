@@ -1,6 +1,8 @@
-"""Observational Techniques, PS 1.
+"""Problem Set 1.
 
-https://moodle1819.wesleyan.edu/pluginfile.php/268955/mod_resource/content/0/hw1.pdf
+Observational Techniques
+Jonas Powell
+10/31/18
 """
 
 import numpy as np
@@ -9,18 +11,21 @@ from astropy.constants import G, M_earth, R_earth, c
 r_earth = R_earth.value
 c = c.value
 
+
+# PART A
+
 pos1 = [19.80159, 155.45581]
 pos2 = [17.75652, 64.58376]
 
-
-# PART A
 def find_distance(pos1, pos2, to_return='arc'):
     """Find the physical distance (in meters) between two points.
+
+    Could use Lambert's Formula for Long Lines to recognize
+    ellipsoidal Earth (not implemented)
 
     Args:
         pos1, pos2 (tuples): Lat, Long in decimal degrees.
     """
-    # https://en.wikipedia.org/wiki/Propagation_of_uncertainty
     phi1, lam1 = pos1
     phi2, lam2 = pos2
 
@@ -107,15 +112,17 @@ def get_final_time_delay(t=3600):
     H = 5.4e5
     alt = 4205
 
+    # Calculate the change in angular position in the course of an hour
     theta_MK = 2 * np.pi * t/86400
     theta_HST_dt = 2 * np.pi * t/5728
+    """Rather than just d_theta/dt, we want its offset from theta=0
+    (i.e. where Mauna Kea initially was), so correct for that:"""
     theta_HST = 2*np.pi - ((np.pi/2) +
                            np.arccos(R_earth.value/(R_earth.value + H)) +
                            theta_HST_dt)
     theta_i = theta_MK + theta_HST
 
-    alpha = np.arctan((R + alt) *
-                      np.sin(theta_i) / (R + H - (R + alt) * np.cos(theta_i)))
+    alpha = np.arctan((R + alt) * np.sin(theta_i) / (R + H - (R + alt) * np.cos(theta_i)))
     theta = alpha + theta_HST - np.pi/2
     l = (R + H - (R + alt) * np.cos(theta_i))/(np.cos(alpha))
 
@@ -126,18 +133,22 @@ def get_final_time_delay(t=3600):
 
 get_final_time_delay()
 
-l_delays, t_delays = [], []
-ts = np.arange(10, 7000, 50)
-for dt in ts:
-    l_delays.append(get_final_time_delay(t=dt)[0])
-    t_delays.append(get_final_time_delay(t=dt)[1])
 
 
-fig, (ax1, ax2) = plt.subplots(1, 2)
-ax1.plot(ts, l_delays)
-ax2.plot(ts, t_delays)
 
-plt.show()
+def plot_delays():
+    """Playing around with plotting the delays."""
+    l_delays, t_delays = [], []
+    ts = np.arange(10, 7000, 50)
+    for dt in ts:
+        l_delays.append(get_final_time_delay(t=dt)[0])
+        t_delays.append(get_final_time_delay(t=dt)[1])
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.plot(ts, l_delays)
+    ax2.plot(ts, t_delays)
+
+    plt.show()
 
 
 
