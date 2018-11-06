@@ -41,6 +41,17 @@ def localtime_to_gmst(minute=minute, hour=hour,
     return gmst
 
 
+def plot_results(mat, res=0.6):
+    # This stuff isn't right yet.
+    lat_coord = (90 + local_latlong[0]) * res
+    long_coord = (180 + local_latlong[1]) * res
+
+    plt.matshow(mat, cmap='magma')
+    plt.contour(mat)
+    plt.plot([lat_coord], [long_coord], 'or')
+    plt.show(block=False)
+
+
 # PROBLEM 1
 def altaz_to_radec(alt_az, pos=local_latlong,
                    minute=minute, hour=hour, day=day,
@@ -97,18 +108,35 @@ def find_source(alt_az, lat_lon=local_latlong,
     lat, lon = lat_lon[0], lat_lon[1]
 
     # my_loc = coordinates.EarthLocation.from_geodetic(lat, lon)
-    ra_dec = altaz_to_radec(alt_az,
-                                    pos=local_latlong,
-                                    minute=minute, hour=hour, day=day,
-                                    month=month, year=year, tz_offset=5)
+    ra_dec = altaz_to_radec(alt_az, pos=local_latlong,
+                            minute=minute, hour=hour, day=day,
+                            month=month, year=year, tz_offset=5)
 
     # c = coordinates.SkyCoord("05h35m17.3s -05d23m28s", frame='icrs')
 
     coords = coordinates.SkyCoord(ra=ra_dec[0], dec=ra_dec[1],
                                   unit=(u.deg, u.deg), frame='icrs')
     # Get the actual results
-    r = 5 * u.arcminute
-    results = vizier.query_region(coords, radius=r, catalog='V/50')
+    r = 100 * u.arcminute
+    results = Vizier.query_region(coords, radius=r, catalog='V/50')[0]
+    df = results.to_pandas()
+
+    candidate_sources = [n for n in df['Name']]
+    candidate_source_infos = []
+    for s in candidate_sources:
+        source_info = df.loc[df['Name'] == s]
+        mag = source_info['Vmag']
+        source_ra_hms = tuple(map(float, source_info['RAJ2000'][0].split()))
+        source_dec_dms = tuple(map(float, source_info['DEJ2000'][0].split()))
+
+        source_ra = Angle(source_ra_hms, unit='hourangle').degree
+        source_dec = Angle(source_dec_dms, unit=u.deg).degree
+
+        dist_from_center = np.sqrt( (np.sin(source_ra) *ra_dec[0]))**2 ( ))
+
+        score = c1 * v/v_max + c2 * d/d_max
+
+
 
 
 
@@ -242,14 +270,15 @@ def find_location(source_name, source_alt_az,
     source_ra = Angle(source_ra_hms, unit='hourangle').degree
     source_dec = Angle(source_dec_dms, unit=u.deg).degree
 
-    res = 1
+    res = 0.6
     lats = np.arange(-90., 90, res)
-    longs = np.arange(0, 180, res)
+    longs = np.arange(-180, 180, res)
 
     ra_grid = np.zeros((len(lats), len(longs)))
     dec_grid = np.zeros((len(lats), len(longs)))
     score_grid = np.zeros((len(lats), len(longs)))
 
+    lat_counter, long_counter = 0, 0
     for i in range(len(lats)):
         for j in range(len(longs)):
             # Need to sort out angular units
@@ -263,24 +292,33 @@ def find_location(source_name, source_alt_az,
             # pos_grid[i, j] = {'RA': ra, 'DEC': dec}
             ra_grid[i, j] = ra
             dec_grid[i, j] = dec
-            score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
+
+            # Bad - planar:
+            # score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
+
+            # Good - spherical:
+            score = np.arccos(np.sin())
+
             score_grid[i, j] = score
-            print('RA, Source RA:', ra, source_ra)
-            print('DEC, Source DEC:', dec, source_dec)
-            print('Score:', score)
-            print('\n')
+
+            verbose = False
+            if verbose is True:
+                print('RA, Source RA:', ra, source_ra)
+                print('DEC, Source DEC:', dec, source_dec)
+                print('Score:', score)
+                print('\n')
+            else:
+                step = long_counter + lat_counter * len(lats)
+                print (str(step) + '/' + str(len(lats) * len(longs)))
+            #plt.close()
+            #plot_results(score_grid)
+            #plt.show(block=False)
+
+            long_counter += 1
 
 
     if plot_grids is True:
-        """
-        f, (ax1, ax2) = plt.subplots(1, 2)
-        ax1.matshow(ra_grid)
-        ax2.matshow(dec_grid)
-        plt.show(block=False)
-        """
-        plt.matshow(score_grid)
-        # plt.set_xticklabels([-90, 0, 90])
-        plt.show(block=False)
+        plot_results(score_grid)
 
 
     return {'RA': ra_grid, 'DEC': dec_grid, 'SCORE': score_grid}
