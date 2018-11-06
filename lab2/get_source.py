@@ -12,50 +12,143 @@ import pandas as pd
 from astropy import coordinates
 from astropy.time import Time
 from astroquery.simbad import Simbad
+from astroquery.vizier import Vizier
 from astropy.coordinates import Angle
 from datetime import datetime
 from astropy.table import Column
+import matplotlib.pyplot as plt
 
 
-# For Mirphak
-# alt1 = Angle((25, 46, 35.13), unit=u.deg)
-# az1 = Angle((357, 23, 44.27), unit=u.deg)
-alt_az_init = (Angle((77, 29, 18.63), unit=u.deg).value,
-               Angle((43, 27, 37.09), unit=u.deg).value)
-lat_lon_init = (41.552, -72.65)
-time_init = datetime(2018, 11, 5, 23, 24, 42, 878762)
+# Some sample things at a sample time
+hour, minute = 13, 36
+day, month, year = 6, 11, 2018
+antares_altaz = (21.7, 185.5)   # 16h31m, -27deg
+altair_altaz = (38.4, 117.1)    # 19h51m, 8deg
 
-# Get right now in MJD (JD is also an option)
-# https://astropy.readthedocs.io/en/v0.3/time/index.html
-# time = Time(datetime.now()).mjd
+local_latlong = (41.552, -72.65)
 
 
-def altaz_to_radec_by_hand(alt_az, pos, time):
-    """Blah.
+# HELPER FUNCTIONS
 
-    alt_az ():
-    pos ():
-    time: LST
-    date
+def localtime_to_gmst(minute=minute, hour=hour,
+                      day=day, month=month, year=year, tz_offset=5):
+    # Implement an option to just use current time.
+    today = datetime.now()
+
+    utc = datetime(year, month, day, hour + tz_offset, minute, 0)
+    T = Time(utc, scale='utc')
+    gmst = T.sidereal_time('mean', 'greenwich').degree
+    return gmst
+
+
+# PROBLEM 1
+def altaz_to_radec(alt_az, pos=local_latlong,
+                   minute=minute, hour=hour, day=day,
+                   month=month, year=year, tz_offset=5):
+    """Convert Alt/Az to RA/Dec.
+
+    Args:
+        alt_az (tuple of floats): alt, az in decimal degrees
+        pos (tuple of floats): local lat, long in decimal degrees
+        hour, minute: ints of the desired time.
+
+    Returns:
+        ra_dec (tuple): RA and Dec in decimal degrees
+
+    Currently assumes all observations are happening today
     """
-    # This seems useful:
-    # http://www.brayebrookobservatory.org/BrayObsWebSite/BOOKS/matrix_method_rev_d.pdf
-    lat, long = pos
-    alt, az = alt_az
+    # Retrieve the coordinates and convert them to rads for some trig.
+    lat, long = pos[0] * (np.pi/180), pos[1] * (np.pi/180)
+    alt, az = alt_az[0] * (np.pi/180), alt_az[1] * (np.pi/180)
 
-    # Still need to convert time to the right format
+    gmst = localtime_to_gmst(minute=minute, hour=hour,
+                             day=day, month=month, year=year, tz_offset=5)
 
     sin_dec = np.sin(alt) * np.sin(lat) + np.cos(alt) * np.cos(lat) * np.cos(az)
     dec = np.arcsin(sin_dec)
 
     cosHA = (np.sin(alt) - np.sin(lat) * np.sin(dec))/(np.cos(lat) * np.cos(dec))
-    HA = np.arccos(cosHA)
-    RA = time - HA
+    HA = np.arccos(cosHA) * (180/np.pi)
 
-    return [RA, dec]
+    dec *= (180/np.pi)
+    ra = gmst + HA + (long * 180/np.pi) if az < np.pi else gmst - HA + (long * 180/np.pi)
+
+    ra_dec = (round(ra, 4), round(dec, 4))
+    return ra_dec
 
 
-def find_source(alt_az, lat_lon, time, return_all_sources=True):
+
+def find_source(alt_az, lat_lon=local_latlong,
+                minute=minute, hour=hour,
+                day=day, month=month, year=year, tz_offset=5,
+                return_all_sources=True):
+    """Find a source given some coordinates.
+
+    Args:
+        alt_az: Tuple of altitude and azimuth (decimal degrees)
+        lat_lon: Tuple of latitude and longitude (decimal degrees)
+        time: Clock time (?)
+
+    Returns:
+        source_name (str):
+    """
+
+    alt, az = alt_az[0], alt_az[1]
+    lat, lon = lat_lon[0], lat_lon[1]
+
+    # my_loc = coordinates.EarthLocation.from_geodetic(lat, lon)
+    ra_dec = altaz_to_radec(alt_az,
+                                    pos=local_latlong,
+                                    minute=minute, hour=hour, day=day,
+                                    month=month, year=year, tz_offset=5)
+
+    # c = coordinates.SkyCoord("05h35m17.3s -05d23m28s", frame='icrs')
+
+    coords = coordinates.SkyCoord(ra=ra_dec[0], dec=ra_dec[1],
+                                  unit=(u.deg, u.deg), frame='icrs')
+    # Get the actual results
+    r = 5 * u.arcminute
+    results = vizier.query_region(coords, radius=r, catalog='V/50')
+
+
+
+
+
+    # Calculate a goodness score for each captured entry
+    # Currently just using Pythagorean distance, but would like to add in a
+    # magnitude element as well.
+    """
+    sources = []
+    obs_ra = [ra_dec.ra.hms.h, ra_dec.ra.hms.m, ra_dec.ra.hms.s]
+    obs_dec = [ra_dec.dec.dms.d, ra_dec.ra.dms.m, ra_dec.ra.dms.s]
+    for i in range(len(results['RA'])):
+        # Put things in a format to compare them
+        ra = [float(c) for c in str(results['RA'][i]).split()]
+        dec = [float(c) for c in str(results['DEC'][i]).split()]
+        dRA = np.array(obs_ra) - np.array(ra)
+        dDEC = np.array(obs_dec) - np.array(dec)
+        dRA_angle = Angle(tuple(dRA), unit='hourangle').value
+        dDEC_angle = Angle(tuple(dDEC), unit=u.deg).value
+        # This might be preferential to one of the directions bc
+        # a degree in hms != a degree in dms?
+        d = {'name': results['MAIN_ID'][i],
+             'score': np.sqrt(dRA_angle**2 + dDEC_angle**2)
+             }
+        sources.append(d)
+    sources_df = pd.DataFrame(sources)
+    best_source = sources_df[sources_df['score'] == sources_df['score'].min()]
+
+    if return_all_sources is True:
+        return ((ra_dec.ra.hms, ra_dec.dec.dms), sources_df)
+    else:
+        return ((ra_dec.ra.hms, ra_dec.dec.dms), best_source['name'])
+    """
+    return results
+
+
+
+
+def find_source_astropy(alt_az, lat_lon, time, return_all_sources=False):
     """Blah.
 
     Args:
@@ -122,9 +215,76 @@ def find_source(alt_az, lat_lon, time, return_all_sources=True):
         return ((ra_dec.ra.hms, ra_dec.dec.dms), best_source['name'])
 
 
-def find_location(source_name, source_ra_dec, time):
-    r = 5 * u.arcminute
-    results = Simbad.query_objectids(source_name)
+
+
+
+def find_location(source_name, source_alt_az,
+                  minute, hour, day, month, year,
+                  plot_grids=True):
+    """Find out where we are on Earth.
+
+    Args:
+        source_name (str):
+        source_ra_dec (tuple of floats):
+        minute, hour, day, month, year (ints):
+
+    Returns:
+        lat_long (tuple of floats): your location.
+    """
+
+    alt, az = source_alt_az
+    source_obj = Vizier.query_object(source_name, catalog='V/50')[0]
+    source_ra_dec = (source_obj['RAJ2000'][0], source_obj['DEJ2000'][0])
+
+    source_ra_hms = tuple(map(float, source_ra_dec[0].split()))
+    source_dec_dms = tuple(map(float, source_ra_dec[1].split()))
+
+    source_ra = Angle(source_ra_hms, unit='hourangle').degree
+    source_dec = Angle(source_dec_dms, unit=u.deg).degree
+
+    res = 1
+    lats = np.arange(-90., 90, res)
+    longs = np.arange(0, 180, res)
+
+    ra_grid = np.zeros((len(lats), len(longs)))
+    dec_grid = np.zeros((len(lats), len(longs)))
+    score_grid = np.zeros((len(lats), len(longs)))
+
+    for i in range(len(lats)):
+        for j in range(len(longs)):
+            # Need to sort out angular units
+            lat, long = lats[i], longs[j]
+
+
+            ra, dec = altaz_to_radec((alt, az), pos=(lat, long),
+                                     minute=minute, hour=hour, day=day,
+                                     month=month, year=year, tz_offset=5)
+
+            # pos_grid[i, j] = {'RA': ra, 'DEC': dec}
+            ra_grid[i, j] = ra
+            dec_grid[i, j] = dec
+            score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
+            score_grid[i, j] = score
+            print('RA, Source RA:', ra, source_ra)
+            print('DEC, Source DEC:', dec, source_dec)
+            print('Score:', score)
+            print('\n')
+
+
+    if plot_grids is True:
+        """
+        f, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.matshow(ra_grid)
+        ax2.matshow(dec_grid)
+        plt.show(block=False)
+        """
+        plt.matshow(score_grid)
+        # plt.set_xticklabels([-90, 0, 90])
+        plt.show(block=False)
+
+
+    return {'RA': ra_grid, 'DEC': dec_grid, 'SCORE': score_grid}
+
 
 
 
