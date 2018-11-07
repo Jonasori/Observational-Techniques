@@ -28,7 +28,7 @@ altair_altaz = (38.4, 117.1)    # 19h51m, 8deg
 local_latlong = (41.552, -72.65)
 
 # Used to determine pixel/degree scale in grid search.
-res = 1.5
+res = 0.1
 
 # HELPER FUNCTIONS
 
