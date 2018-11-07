@@ -106,11 +106,11 @@ def find_source(alt_az, lat_lon=local_latlong,
         source_name (str):
     """
 
-    alt, az = alt_az[0], alt_az[1]
-    lat, lon = lat_lon[0], lat_lon[1]
+    # alt, az = alt_az[0], alt_az[1]
+    # lat, lon = lat_lon[0], lat_lon[1]
 
     # my_loc = coordinates.EarthLocation.from_geodetic(lat, lon)
-    ra_dec = altaz_to_radec(alt_az, pos=local_latlong,
+    ra_dec = altaz_to_radec(alt_az, pos=lat_lon,
                             minute=minute, hour=hour, day=day,
                             month=month, year=year, tz_offset=5)
 
@@ -119,20 +119,20 @@ def find_source(alt_az, lat_lon=local_latlong,
     coords = coordinates.SkyCoord(ra=ra_dec[0], dec=ra_dec[1],
                                   unit=(u.deg, u.deg), frame='icrs')
     # Get the actual results
-    r = 100 * u.arcminute
+    r = 1000 * u.arcminute
     results = Vizier.query_region(coords, radius=r, catalog='V/50')[0]
     df = results.to_pandas()
 
-    candidate_sources = filter(None, [n for n in df['Name']])
+    candidate_sources = filter(None, [n for n in df['HD']])
     sources = []
     dmax, vmax = 0, 0
     for s in candidate_sources:
-        print s, '\n\n'
-        source_info = df.loc[df['Name'] == s]
-        print source_info['Vmag']
+        source_info = df.loc[df['HD'] == s]
         mag = round(float(source_info['Vmag']), 2)
-        source_ra_hms = tuple(map(float, source_info['RAJ2000'][0].split()))
-        source_dec_dms = tuple(map(float, source_info['DEJ2000'][0].split()))
+        temp_ra = source_info['RAJ2000'].tolist()[0]
+        temp_dec = source_info['DEJ2000'].tolist()[0]
+        source_ra_hms = tuple(map(float, temp_ra.split()))
+        source_dec_dms = tuple(map(float, temp_dec.split()))
 
         source_ra = Angle(source_ra_hms, unit='hourangle').degree
         source_dec = Angle(source_dec_dms, unit=u.deg).degree
@@ -140,23 +140,49 @@ def find_source(alt_az, lat_lon=local_latlong,
         dist_from_center = np.sqrt((source_ra - ra_dec[0])**2 +
                                    (source_dec - ra_dec[1])**2)
 
-        c1, c2 = 0.5, 0.5
-        score = c1 * mag + c2 * dist_from_center
-        source_dict = {'Name': source_info['Name'],
+        # score = c1 * mag + c2 * dist_from_center
+        source_dict = {'HD': source_info['HD'],
                        'RA': source_ra,
                        'DEC': source_dec,
                        'Distance': dist_from_center,
-                       'Vmag': source_info['Vmag'],
-                       'Score': score}
+                       'Vmag': source_info['Vmag']}
 
         sources.append(source_dict)
         dmax = dist_from_center if dist_from_center > dmax else dmax
         vmax = mag if mag > vmax else mag
 
-    sources_df = pd.DataFrame(sources)
-    best_source = sources_df[sources_df['score'] == sources_df['score'].min()]
+    c1, c2 = 0.5, 0.5
+    for s in range(len(sources)):
+        d = sources[s]['Distance']/dmax
+        mag = sources[s]['Vmag']/vmax
+        score = c1 * mag + c2 * d
+        sources[s]['Score'] = score
 
-    return sources_df
+
+    for s in candidate_sources:
+        source = df.loc[df['HD'] == s]
+        d = sources[s]['Distance']/dmax
+        mag = sources[s]['Vmag']/vmax
+        score = c1 * mag + c2 * d
+        sources[s]['Score'] = score
+
+
+    sources_df = pd.DataFrame(sources)
+
+    # Note that this loop is supremely janky, but df.loc'ing wasn't working.
+    # best_source = sources_df.loc[sources_df['Score'] == sources_df['Score'].min]
+    best_source_idx = 0
+    for i in range(len(sources)):
+        score = sources[i]['Score'].values[0]
+        if score < sources[best_source_idx]['Score'].values[0]:
+            best_source_idx = i
+
+    out = {'Coords': ra_dec,
+           'Name': 'HD' + str(int(sources[best_source_idx]['HD'].values[0])),
+           'Score': sources[best_source_idx]['Score'],
+           'Distance': sources[best_source_idx]['Distance']
+           }
+    return out
 
 
 
@@ -303,9 +329,19 @@ def find_location(source_name, source_alt_az,
         lat_coord = (90 + local_latlong[0]) * res
         long_coord = (180 + local_latlong[1]) * res
 
-        plt.matshow(score_grid, cmap='magma')
         plt.contour(score_grid)
         plt.plot([lat_coord], [long_coord], 'or')
+        plt.matshow(score_grid, cmap='magma')
+
+        xtick_locs = np.arange(0, len(longs), len(longs)/6)
+        xtick_labs = [int(longs[i]) for i in xtick_locs]
+        plt.xticks(xtick_locs, xtick_labs)
+
+        # plt.ylim(max(lats), min(lats))
+        ytick_locs = np.arange(0, len(lats), len(lats)/10)
+        ytick_labs = [int(lats[i]) for i in ytick_locs]
+        plt.yticks(ytick_locs, ytick_labs)
+
         plt.savefig(outname + '.png', dpi=200)
         plt.show(block=False)
 
