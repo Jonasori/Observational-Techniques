@@ -27,11 +27,12 @@ altair_altaz = (38.4, 117.1)    # 19h51m, 8deg
 
 local_latlong = (41.552, -72.65)
 
+# Used to determine pixel/degree scale in grid search.
+res = 1.5
 
 # HELPER FUNCTIONS
 
-def localtime_to_gmst(minute=minute, hour=hour,
-                      day=day, month=month, year=year, tz_offset=5):
+def localtime_to_gmst(minute=minute, hour=hour, day=day, month=month, year=year, tz_offset=5):
     # Implement an option to just use current time.
     today = datetime.now()
 
@@ -41,7 +42,7 @@ def localtime_to_gmst(minute=minute, hour=hour,
     return gmst
 
 
-def plot_results(mat, res=0.6):
+def plot_results(mat, name):
     # This stuff isn't right yet.
     lat_coord = (90 + local_latlong[0]) * res
     long_coord = (180 + local_latlong[1]) * res
@@ -49,6 +50,7 @@ def plot_results(mat, res=0.6):
     plt.matshow(mat, cmap='magma')
     plt.contour(mat)
     plt.plot([lat_coord], [long_coord], 'or')
+    plt.savefig(name + '-' + str(res) + '.png', dpi=200)
     plt.show(block=False)
 
 
@@ -121,57 +123,40 @@ def find_source(alt_az, lat_lon=local_latlong,
     results = Vizier.query_region(coords, radius=r, catalog='V/50')[0]
     df = results.to_pandas()
 
-    candidate_sources = [n for n in df['Name']]
-    candidate_source_infos = []
+    candidate_sources = filter(None, [n for n in df['Name']])
+    sources = []
+    dmax, vmax = 0, 0
     for s in candidate_sources:
+        print s, '\n\n'
         source_info = df.loc[df['Name'] == s]
-        mag = source_info['Vmag']
+        print source_info['Vmag']
+        mag = round(float(source_info['Vmag']), 2)
         source_ra_hms = tuple(map(float, source_info['RAJ2000'][0].split()))
         source_dec_dms = tuple(map(float, source_info['DEJ2000'][0].split()))
 
         source_ra = Angle(source_ra_hms, unit='hourangle').degree
         source_dec = Angle(source_dec_dms, unit=u.deg).degree
 
-        dist_from_center = np.sqrt( (np.sin(source_ra) *ra_dec[0]))**2 ( ))
+        dist_from_center = np.sqrt((source_ra - ra_dec[0])**2 +
+                                   (source_dec - ra_dec[1])**2)
 
-        score = c1 * v/v_max + c2 * d/d_max
+        c1, c2 = 0.5, 0.5
+        score = c1 * mag + c2 * dist_from_center
+        source_dict = {'Name': source_info['Name'],
+                       'RA': source_ra,
+                       'DEC': source_dec,
+                       'Distance': dist_from_center,
+                       'Vmag': source_info['Vmag'],
+                       'Score': score}
 
+        sources.append(source_dict)
+        dmax = dist_from_center if dist_from_center > dmax else dmax
+        vmax = mag if mag > vmax else mag
 
-
-
-
-
-
-    # Calculate a goodness score for each captured entry
-    # Currently just using Pythagorean distance, but would like to add in a
-    # magnitude element as well.
-    """
-    sources = []
-    obs_ra = [ra_dec.ra.hms.h, ra_dec.ra.hms.m, ra_dec.ra.hms.s]
-    obs_dec = [ra_dec.dec.dms.d, ra_dec.ra.dms.m, ra_dec.ra.dms.s]
-    for i in range(len(results['RA'])):
-        # Put things in a format to compare them
-        ra = [float(c) for c in str(results['RA'][i]).split()]
-        dec = [float(c) for c in str(results['DEC'][i]).split()]
-        dRA = np.array(obs_ra) - np.array(ra)
-        dDEC = np.array(obs_dec) - np.array(dec)
-        dRA_angle = Angle(tuple(dRA), unit='hourangle').value
-        dDEC_angle = Angle(tuple(dDEC), unit=u.deg).value
-        # This might be preferential to one of the directions bc
-        # a degree in hms != a degree in dms?
-        d = {'name': results['MAIN_ID'][i],
-             'score': np.sqrt(dRA_angle**2 + dDEC_angle**2)
-             }
-        sources.append(d)
     sources_df = pd.DataFrame(sources)
     best_source = sources_df[sources_df['score'] == sources_df['score'].min()]
 
-    if return_all_sources is True:
-        return ((ra_dec.ra.hms, ra_dec.dec.dms), sources_df)
-    else:
-        return ((ra_dec.ra.hms, ra_dec.dec.dms), best_source['name'])
-    """
-    return results
+    return sources_df
 
 
 
@@ -270,7 +255,6 @@ def find_location(source_name, source_alt_az,
     source_ra = Angle(source_ra_hms, unit='hourangle').degree
     source_dec = Angle(source_dec_dms, unit=u.deg).degree
 
-    res = 0.6
     lats = np.arange(-90., 90, res)
     longs = np.arange(-180, 180, res)
 
@@ -284,7 +268,6 @@ def find_location(source_name, source_alt_az,
             # Need to sort out angular units
             lat, long = lats[i], longs[j]
 
-
             ra, dec = altaz_to_radec((alt, az), pos=(lat, long),
                                      minute=minute, hour=hour, day=day,
                                      month=month, year=year, tz_offset=5)
@@ -294,10 +277,10 @@ def find_location(source_name, source_alt_az,
             dec_grid[i, j] = dec
 
             # Bad - planar:
-            # score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
+            score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
 
             # Good - spherical:
-            score = np.arccos(np.sin())
+            # score = np.arccos(np.sin(dec) * np.sin(source_dec) + np.cos(dec) * np.cos(source_dec) * np.cos(abs(ra - source_ra)))
 
             score_grid[i, j] = score
 
@@ -310,15 +293,21 @@ def find_location(source_name, source_alt_az,
             else:
                 step = long_counter + lat_counter * len(lats)
                 print (str(step) + '/' + str(len(lats) * len(longs)))
-            #plt.close()
-            #plot_results(score_grid)
-            #plt.show(block=False)
-
             long_counter += 1
 
+    outname = 'latlong-gridsearch-results_' + str(res)
+    score_df = pd.DataFrame(score_grid)
+    score_df.to_csv(outname + '.csv')
 
     if plot_grids is True:
-        plot_results(score_grid)
+        lat_coord = (90 + local_latlong[0]) * res
+        long_coord = (180 + local_latlong[1]) * res
+
+        plt.matshow(score_grid, cmap='magma')
+        plt.contour(score_grid)
+        plt.plot([lat_coord], [long_coord], 'or')
+        plt.savefig(outname + '.png', dpi=200)
+        plt.show(block=False)
 
 
     return {'RA': ra_grid, 'DEC': dec_grid, 'SCORE': score_grid}
