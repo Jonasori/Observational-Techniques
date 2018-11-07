@@ -256,7 +256,173 @@ def find_source_astropy(alt_az, lat_lon, time, return_all_sources=False):
 
 
 
+
+
+
+
+
+now = datetime.now()
+
+second_now, minute_now, hour_now = now.second, now.minute, now.hour
+day_now, month_now, year_now = now.day, now.month, now.year
+
 def find_location(source_name, source_alt_az,
+                  minute=minute_now, hour=hour_now, day=day_now,
+                  month=month_now, year=year_now, plot_grids=True):
+    """Find out where we are on Earth.
+
+    Args:
+        source_name (str):
+        source_ra_dec (tuple of floats):
+        minute, hour, day, month, year (ints):
+
+    Returns:
+        lat_long (tuple of floats): your location.
+    """
+
+    alt, az = source_alt_az
+    source_obj = Vizier.query_object(source_name, catalog='V/50')[0]
+    source_ra_dec = (source_obj['RAJ2000'][0], source_obj['DEJ2000'][0])
+
+    source_ra_hms = tuple(map(float, source_ra_dec[0].split()))
+    source_dec_dms = tuple(map(float, source_ra_dec[1].split()))
+
+    source_ra = Angle(source_ra_hms, unit='hourangle').degree
+    source_dec = Angle(source_dec_dms, unit=u.deg).degree
+
+
+    lat_crit = 0.01
+    step = 10
+    lats = np.linspace(-90, 90, step)
+    longs = np.linspace(-180., 180., 2*step)
+    lat_min, lat_max = 0, len(lats) - 1
+    long_min, long_max = 0, len(longs) - 1
+
+    real_lat, real_long = 41.55, -72.65
+
+    counter = 0
+    while abs(lats[1] - lats[0]) > lat_crit:
+        lats = np.linspace(lats[lat_min], lats[lat_max], step)
+        longs = np.linspace(longs[long_min], longs[long_max], 2*step)
+
+        # ra_grid = np.zeros((len(lats), len(longs)))
+        # dec_grid = np.zeros((len(lats), len(longs)))
+        score_grid = np.zeros((len(lats), len(longs)))
+
+        # Run the grid
+        for i in range(len(lats)):
+            for j in range(len(longs)):
+                lat, long = lats[i], longs[j]
+
+                ra, dec = altaz_to_radec((alt, az), pos=(lat, long),
+                                         minute=minute, hour=hour, day=day,
+                                         month=month, year=year, tz_offset=5)
+
+                # ra_grid[i, j] = ra
+                # dec_grid[i, j] = dec
+
+                score = np.sqrt((ra - source_ra)**2 + (dec - source_dec)**2)
+                score_grid[i, j] = score
+
+        idx = np.where(score_grid == np.nanmin(score_grid))
+        lat_min = idx[0][0] - 1 if idx[0][0] > 0 else 0
+        lat_max = idx[0][0] + 1 if idx[0][0] < len(lats) - 1 else len(lats) - 1
+
+        long_min = idx[1][0] - 1 if idx[1][0] > 0 else 0
+        long_max = idx[1][0] + 1 if idx[1][0] < len(longs) - 1 else len(longs) - 1
+
+        print idx
+        print "Lat range, lat window", abs(lats[1] - lats[0]), lat_min, lat_max
+        print "Long range, long window", abs(longs[1] - longs[0]), long_min, long_max
+        print "\n"
+
+        plt.matshow(score_grid, cmap='magma')
+        xtick_locs = np.arange(0, len(longs), len(longs)/6)
+        xtick_labs = [int(longs[i]) for i in xtick_locs]
+        plt.xticks(xtick_locs, xtick_labs)
+
+        ytick_locs = np.arange(0, len(lats), len(lats)/6)
+        ytick_labs = [int(lats[i]) for i in ytick_locs]
+        plt.yticks(ytick_locs, ytick_labs)
+
+        min_dist, lat_loc = 360, 0
+        for i in range(len(lats)):
+            if abs(real_lat - lats[i]) < min_dist:
+                min_dist = lats[i]
+                lat_loc = i
+                print "Improving lat loc", i
+                print real_lat, lats[i], real_lat - lats[i]
+
+
+        min_dist, lat_loc = 360, 0
+        for i in range(len(longs)):
+            if abs(real_long - longs[i]) < min_dist:
+                min_dist = longs[i]
+                long_loc = i
+                print "Improving long loc", i
+                print real_long, longs[i], real_long - longs[i]
+
+        plt.plot([longs[long_loc]], [lats[lat_loc]], 'or')
+        plt.savefig('window-evolution' + str(counter) + '.png')
+        plt.close
+
+        counter += 1
+
+    return (lats[idx[0][0]], longs[idx[1][0]])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    outname = 'latlong-gridsearch-results_' + str(res)
+    score_df = pd.DataFrame(score_grid)
+    score_df.to_csv(outname + '.csv')
+
+    if plot_grids is True:
+        lat_coord = (90 + local_latlong[0]) * res
+        long_coord = (180 + local_latlong[1]) * res
+
+        plt.contour(score_grid)
+        plt.plot([lat_coord], [long_coord], 'or')
+        plt.matshow(score_grid, cmap='magma')
+
+        xtick_locs = np.arange(0, len(longs), len(longs)/6)
+        xtick_labs = [int(longs[i]) for i in xtick_locs]
+        plt.xticks(xtick_locs, xtick_labs)
+
+        # plt.ylim(max(lats), min(lats))
+        ytick_locs = np.arange(0, len(lats), len(lats)/10)
+        ytick_labs = [int(lats[i]) for i in ytick_locs]
+        plt.yticks(ytick_locs, ytick_labs)
+
+        plt.savefig(outname + '.png', dpi=200)
+        plt.show(block=False)
+
+
+    return {'RA': ra_grid, 'DEC': dec_grid, 'SCORE': score_grid}
+
+
+
+
+
+
+
+
+
+
+
+def find_location_gs(source_name, source_alt_az,
                   minute, hour, day, month, year,
                   plot_grids=True):
     """Find out where we are on Earth.
@@ -287,6 +453,7 @@ def find_location(source_name, source_alt_az,
     dec_grid = np.zeros((len(lats), len(longs)))
     score_grid = np.zeros((len(lats), len(longs)))
 
+    # Run the grid
     lat_counter, long_counter = 0, 0
     for i in range(len(lats)):
         for j in range(len(longs)):
