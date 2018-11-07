@@ -29,6 +29,7 @@ local_latlong = (41.552, -72.65)
 
 # Used to determine pixel/degree scale in grid search.
 res = 0.1
+c1, c2 = 0.5, 0.5
 
 # HELPER FUNCTIONS
 
@@ -91,6 +92,7 @@ def altaz_to_radec(alt_az, pos=local_latlong,
 
 
 
+
 def find_source(alt_az, lat_lon=local_latlong,
                 minute=minute, hour=hour,
                 day=day, month=month, year=year, tz_offset=5,
@@ -105,21 +107,15 @@ def find_source(alt_az, lat_lon=local_latlong,
     Returns:
         source_name (str):
     """
-
-    # alt, az = alt_az[0], alt_az[1]
-    # lat, lon = lat_lon[0], lat_lon[1]
-
-    # my_loc = coordinates.EarthLocation.from_geodetic(lat, lon)
     ra_dec = altaz_to_radec(alt_az, pos=lat_lon,
                             minute=minute, hour=hour, day=day,
                             month=month, year=year, tz_offset=5)
 
-    # c = coordinates.SkyCoord("05h35m17.3s -05d23m28s", frame='icrs')
-
     coords = coordinates.SkyCoord(ra=ra_dec[0], dec=ra_dec[1],
                                   unit=(u.deg, u.deg), frame='icrs')
     # Get the actual results
-    r = 1000 * u.arcminute
+    # For some reason, if this goes too big it stops seeing the actual source.
+    r = 500 * u.arcminute
     results = Vizier.query_region(coords, radius=r, catalog='V/50')[0]
     df = results.to_pandas()
 
@@ -128,59 +124,62 @@ def find_source(alt_az, lat_lon=local_latlong,
     dmax, vmax = 0, 0
     for s in candidate_sources:
         source_info = df.loc[df['HD'] == s]
+        name = source_info['Name']
         mag = round(float(source_info['Vmag']), 2)
+
         temp_ra = source_info['RAJ2000'].tolist()[0]
         temp_dec = source_info['DEJ2000'].tolist()[0]
         source_ra_hms = tuple(map(float, temp_ra.split()))
         source_dec_dms = tuple(map(float, temp_dec.split()))
-
         source_ra = Angle(source_ra_hms, unit='hourangle').degree
         source_dec = Angle(source_dec_dms, unit=u.deg).degree
 
         dist_from_center = np.sqrt((source_ra - ra_dec[0])**2 +
                                    (source_dec - ra_dec[1])**2)
 
-        # score = c1 * mag + c2 * dist_from_center
-        source_dict = {'HD': source_info['HD'],
+        score = float(c1 * mag + c2 * dist_from_center)
+        source_dict = {'HD': source_info['HD'].values[0],
+                       'Name': source_info['Name'].values[0],
                        'RA': source_ra,
                        'DEC': source_dec,
                        'Distance': dist_from_center,
-                       'Vmag': source_info['Vmag']}
+                       'Vmag': source_info['Vmag'],
+                       'Score': score}
 
         sources.append(source_dict)
+
         dmax = dist_from_center if dist_from_center > dmax else dmax
         vmax = mag if mag > vmax else mag
 
-    c1, c2 = 0.5, 0.5
     for s in range(len(sources)):
         d = sources[s]['Distance']/dmax
-        mag = sources[s]['Vmag']/vmax
+        mag = sources[s]['Vmag'].values[0]/vmax
         score = c1 * mag + c2 * d
         sources[s]['Score'] = score
-
-
-    for s in candidate_sources:
-        source = df.loc[df['HD'] == s]
-        d = sources[s]['Distance']/dmax
-        mag = sources[s]['Vmag']/vmax
-        score = c1 * mag + c2 * d
-        sources[s]['Score'] = score
-
+        sources[s]['Scaled-Distance'] = d
+        sources[s]['Scaled-Mag'] = mag
 
     sources_df = pd.DataFrame(sources)
+
 
     # Note that this loop is supremely janky, but df.loc'ing wasn't working.
     # best_source = sources_df.loc[sources_df['Score'] == sources_df['Score'].min]
     best_source_idx = 0
+    # best_score = np.array([])
+    best_score = 10000
     for i in range(len(sources)):
-        score = sources[i]['Score'].values[0]
-        if score < sources[best_source_idx]['Score'].values[0]:
+        score = sources[i]['Score']
+        if score < best_score:
             best_source_idx = i
+            best_score = score
 
+    name = sources_df['Name'].values[0]
     out = {'Coords': ra_dec,
-           'Name': 'HD' + str(int(sources[best_source_idx]['HD'].values[0])),
+           'HD-Name': 'HD' + str(int(sources[best_source_idx]['HD'])),
+           'Name': sources[best_source_idx]['Name'],
            'Score': sources[best_source_idx]['Score'],
-           'Distance': sources[best_source_idx]['Distance']
+           'Scaled-Distance': sources[best_source_idx]['Scaled-Distance'],
+           'Scaled-Mag': sources[best_source_idx]['Scaled-Mag']
            }
     return out
 
