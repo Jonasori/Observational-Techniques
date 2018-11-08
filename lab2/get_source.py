@@ -4,9 +4,13 @@ These functions are pretty catastrophically under-tested, and several known
 problems exist, but both find* functions are functional under certain
 conditions. Written for Python 2
 
-Future work: Integrate everything into Source classes with built-in
-alt/az -> RA/Dec conversions and queried catalog info (magnitude, HD name, etc)
-integrated in. That'd be pretty cool.
+Future work:
+- Fix the broken stuff.
+- Integrate everything into Source classes with built-in
+  alt/az -> RA/Dec conversions and queried catalog info (magnitude, HD #, etc)
+  integrated in. That'd be pretty cool.
+- Run cost analysis on tuning the tunables. Would be pretty simple but cool.
+-
 """
 __author__ = "Jonas Powell"
 __email__ = "jmpowell@wesleyan.edu"
@@ -35,10 +39,10 @@ c2 = 1 - c1
 lat_crit = 1
 
 # Set how fine each grid should be (line 300)
-step = 7
+step = 20
+
 
 # Some pre-built source objects:
-
 # Antares: Bad
 antares = {'Name': 'Antares',
            'Alt': float(21.7),
@@ -214,7 +218,6 @@ def find_source(obs, return_all_sources=True):
     dmax, vmax = 0, 0
     for s in candidate_sources:
         source_info = df.loc[df['HD'] == s]
-        name = source_info['Name']
         mag = round(float(source_info['Vmag']), 2)
 
         temp_ra = source_info['RAJ2000'].tolist()[0]
@@ -262,14 +265,13 @@ def find_source(obs, return_all_sources=True):
             best_score = score
 
     print score
-    name = sources_df['Name'].values[0]
     out = {'Coords': ra_dec,
            'HD-Name': 'HD' + str(int(sources[best_source_idx]['HD'])),
            }
     return out
 
 
-def find_location(obs, plot_steps=True):
+def find_location(obs, step=step, lat_crit=lat_crit, plot_steps=True):
     """Find out where we are on Earth using nested grid searches.
 
     Args:
@@ -285,6 +287,10 @@ def find_location(obs, plot_steps=True):
 
     Known problems:
         - Badness in the altaz_to_radec() function that obviously affects this
+        - Choosing the wrong gridding scale affects the results significantly
+            (for Fomalhaut, steps=100 gives a terrible solution,
+                            steps=10 gives an almost perfect solution,
+                            steps=6 gives a close but not great solution.)
     """
     source_name = obs['Name']
 
@@ -304,7 +310,7 @@ def find_location(obs, plot_steps=True):
 
     # Set up a new directory to hold the output images in:
     if plot_steps is True:
-        new_dir = 'LatLong-Evo-Plots_' + obs['Name']
+        new_dir = 'LatLong-Evo-Plots_' + obs['Name'] + '_res' + str(step)
         sp.call(['rm', '-rf', '{}'.format(new_dir)])
         sp.call(['mkdir', '{}'.format(new_dir)])
 
@@ -365,9 +371,11 @@ def find_location(obs, plot_steps=True):
             ytick_labs = [int(lats[y]) for y in ytick_locs]
             plt.yticks(ytick_locs, ytick_labs)
 
-            plt.xlabel('Longitude')
-            plt.ylabel('Latitude')
+            plt.xlabel('Longitude', weight='bold')
+            plt.ylabel('Latitude', weight='bold')
 
+            plt.title("Grid Searching for "+obs['Name']+"; Step "+str(step),
+                      weight='bold')
             plt.savefig(new_dir + '/window-evolution' + str(counter) + '.png')
             plt.close
 

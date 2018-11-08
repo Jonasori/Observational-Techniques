@@ -14,7 +14,7 @@
 \item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
 %If you want to title your bold things something different just make another thing exactly like this but replace "problem" with the name of the thing you want, like theorem or lemma or whatever
 
-\graphicspath{ {./} }
+\graphicspath{ {./LatLong-Evo-LatLong-Evo-Plots_Fomalhaut_res20/} }
 
 \begin{document}
 
@@ -30,46 +30,27 @@
 \iffalse
 For part 1, describe the methodology you used to determine most probable astronomical source.
 \fi
-\raggedright{\textbf{\Large Part 4}}\\
+\raggedright{\textbf{\Large Part 3}}\\
 
 For Part 1, I implemented the cost function:
 
 \begin{align*}
-  C &= c_1 \, \frac{V}{V_{\text{max}}} + (c_2 = 1 - c1) \frac{d}{d_{\text{max}}} \\
+  C &= c_1 \frac{V}{V_{\text{max}}} + c_2 \frac{d}{d_{\text{max}}} \\
 \end{align*}
 
-where $V$ was the source's V-band magnitude (given in the results of a query of the Vizier V/50 bright star catalog accessed through astroquery), and $d$ was the source's Pythagorean distance, in decimal degrees, each scaled by the maximum value of each quantity given in the query's results (since more than one source is usually returned). This normalization, while not totally necessary, does guarantee that $[\frac{V}{V_{\text{max}}}, c_2 \frac{d}{d_{\text{max}}}] \leq 1$, which allows us to treat $c_1$ and $c_2$ as traditionally weights and tune the influence of each element as we see fit. For this problem, I just set $c_1 = c_2 = 0.5$ for simplicity's sake, and because I couldn't come up with a good reason to prefer proximity to the requested sky coordinates over brightness; each should obviously play a role but considering how those roles relate is deserving of further thought.
+where $c_2 = 1 - c_1$, $V$ was the source's V-band magnitude (given in the results of a query of the Vizier V/50 bright star catalog accessed through astroquery), and $d$ was the source's Pythagorean distance, in decimal degrees, each scaled by the maximum value of each quantity given in the query's results (since more than one source is usually returned). This normalization, while not totally necessary, does guarantee that $\frac{V}{V_{\text{max}}}$ and $\frac{d}{d_{\text{max}}}$ are both $\leq 1$, which allows us to treat $c_1$ and $c_2$ as traditional weights and tune the influence of each element as we see fit. For this problem, I just set $c_1 = c_2 = 0.5$ for simplicity's sake, and because I couldn't come up with a good reason to prefer proximity to the requested sky coordinates over brightness; each should obviously play a role but considering how those roles relate is deserving of further thought. \bigskip
 
+It's also somewhat worth noting that the normalization I'm doing is a little dishonest since, while $d$ scales linearly, $V$ scales logarithmically, so the difference between $\frac{V}{V_{\text{max}}} = 0.25$ and $0.5$ is not the same as when $\frac{d}{d_{\text{max}}}$ moves between those same values. Again, this could be more thoroughly thought through if a rigorous implementation were being made.
+\bigskip \bigskip
 
 
 
 \iffalse
 For part 2, how does the uncertainty in your geographic position compare with the uncertainty in astronomical coordinates from the previous problem? 
 \fi
-\raggedright{\textbf{\Large Part 3}}\\
-Significantly! My method for determining geographic location is able to 
+\raggedright{\textbf{\Large Part 4}}\\
+When it's working right, my location finder is able to find the location to within tenths of degrees, which, while good, is still quite a bit bigger than the ~10" quoted uncertainty in the astronomical measurements. The propogation path for this error is a bit long and tedious (since it goes through the alt/az $\rightarrow$ RA/Dec conversion, and then goes through my nested grid search, both of which introduce non-linear errors), but overall I think that's fairly reasonable.
 
-
-
-
-%% FIGURES
-\newpage
-
-
-%\iffalse
-\begin{figure}
-    \centering
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=0.95\textwidth]{prob1b} % first figure itself
-        \caption{Signal from a source at one source's horizon results in this geometric event, from which we can find difference in path length for signal reaching each dish.}
-    \end{minipage}\hfill
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=0.95\textwidth]{prob2b} % second figure itself
-        \caption{Signal from a source at one source's horizon results in this geometric event, from which we can find difference in path length for signal reaching each dish.}
-    \end{minipage}
-\end{figure}
 
 
 
