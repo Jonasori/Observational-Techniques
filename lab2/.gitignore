@@ -1,2 +1,8 @@
 *.csv
 *.png
+*.gz
+*.log
+*.fls
+*.fdb_latexmk
+*.aux
+LatLong-Evo*
