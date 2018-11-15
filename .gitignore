@@ -1,4 +1,6 @@
 *.csv
+*sync*
+*.xml*
 *.fls
 *.log
 *.gz
