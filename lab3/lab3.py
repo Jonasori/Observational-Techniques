@@ -1,7 +1,9 @@
 """
-Observational Techniques, Lab 3
+Plot some cool stuff using some fun data.
 
-Making an HR diagram and stuff.
+Observational Techniques, Lab 3
+Jonas Powell
+November 19, 2018
 """
 
 # Packages
@@ -107,9 +109,10 @@ plot_faber_jackson()
 
 # PART 2
 # Parameters by which to ID Pleiades objects.
-ra_lims, dec_lims, plx_lims = (10, 30), (-50, -35), (5.5, 10)
-# ra_lims, dec_lims, plx_lims = (-30, 80), (-100, -45), (5.5, 10)
-# ra_lims, dec_lims, plx_lims = (-60, 80), (-100, -45), (5.5, 10)
+pmra_lims, pmdec_lims = (12, 30), (-52, -40)
+posra_lims, posdec_lims = (56.85 - 2, 56.85 + 2), (24.12 - 2, 24.12 + 2)
+plx_lims = (5.5, 10)
+
 
 # Compile the Hipparcos dataframe
 
@@ -124,9 +127,6 @@ def get_hipparcos_data():
     hip_results_raw = Vizier.query_region(coords, radius=r,
                                           catalog='I/239/hip_main')[0]
     hip_results = hip_results_raw.to_pandas()
-
-    # Get a sorted list of the columns for reference
-    hip_cols = sorted(hip_results.columns)
 
     hip_df = pd.DataFrame()
     hip_df['Proper Motion (RA)'] = hip_results['pmRA']
@@ -143,12 +143,11 @@ def get_hipparcos_data():
     hip_df['Plx. Error'] = hip_results['e_Plx']
     hip_df['Confidence'] = 1 - hip_results['e_Plx']/max(hip_results['e_Plx'])
 
-
     # Subset the data based on proper motion and Parallax cuts
-    ra_cond1 = hip_results['pmRA'] > ra_lims[0]
-    ra_cond2 = hip_results['pmRA'] < ra_lims[1]
-    dec_cond1 = hip_results['pmDE'] > dec_lims[0]
-    dec_cond2 = hip_results['pmDE'] < dec_lims[1]
+    ra_cond1 = hip_results['pmRA'] > pmra_lims[0]
+    ra_cond2 = hip_results['pmRA'] < pmra_lims[1]
+    dec_cond1 = hip_results['pmDE'] > pmdec_lims[0]
+    dec_cond2 = hip_results['pmDE'] < pmdec_lims[1]
     plx_cond1 = hip_results['Plx'] > plx_lims[0]
     plx_cond2 = hip_results['Plx'] < plx_lims[1]
 
@@ -158,7 +157,7 @@ def get_hipparcos_data():
     pleiades_hip = {'Survey': 'Hipparcos',
                     'Mean Distance': round(np.mean(hip_df['Distance']), 1),
                     'Number of Stars': len(hip_df['Distance']),
-                    'text_loc1': (0.25, -1.8),
+                    'text_loc1': (0.15, -1.8),
                     'text_loc2': (0.25, -0.8),
                     'Data': hip_df}
     return pleiades_hip
@@ -168,39 +167,35 @@ pleiades_hip = get_hipparcos_data()
 
 
 # Compile the GAIA dataframe
-def get_gaia_data(n_sources=5000):
+def get_gaia_data(n_sources=10000):
     """Build a data structure for the Gaia data.
 
-    Really need a better/additional way to identify stars in the pleiades.
+    Paper on bands, colors, and equivalencies for GAIA:
+    arxiv.org/pdf/1008.0815.pdf'
 
-    Documentation on the GAIA columns:
-    http://gea.esac.esa.int/archive/documentation/GDR2/Gaia_archive/
-    chap_datamodel/sec_dm_main_tables/ssec_dm_gaia_source.html
-
-    'For relations using V-RC, RC-IC, or B-V or for relations linking Sloan
-    magnitudes (g or r) and colours (g-r, g-i, or r-i) to Gaia G magnitudes,
-    please see arxiv.org/pdf/1008.0815.pdf'
-
-    Basically, since GAIA uses longer wavelength light, their Colors don't map
-    to UBVRI bandpasses (p. 4, Table 1).
-
-    Age between 80 and 100 Myr
-    https://www.universetoday.com/34994/messier-45-pleiades/
+    Basically, since GAIA uses longer wavelength light, their colors don't map
+    to UBVRI bandpasses (p. 4, Table 1). This paper refers us to use B-R for
+    color, and since we used V magnitude when considering B-V color, I chose
+    to use the R band magnitude for my apparent magnitude values.
     """
     print "Building GAIA dataframe for {} sources.".format(n_sources)
 
     gaia_str = "SELECT top {} * FROM gaiadr2.gaia_source \
                 WHERE pmra between {} and {} \
                 AND pmdec between {} and {} \
+                AND ra between {} and {} \
+                AND dec between {} and {} \
                 AND parallax between {} and {} \
                 AND parallax_error < 2 \
                 AND parallax_over_error > 5 \
                 ".format(n_sources,
-                         ra_lims[0], ra_lims[1],
-                         dec_lims[0], dec_lims[1],
+                         pmra_lims[0], pmra_lims[1],
+                         pmdec_lims[0], pmdec_lims[1],
+                         posra_lims[0], posra_lims[1],
+                         posdec_lims[0], posdec_lims[1],
                          plx_lims[0], plx_lims[1])
 
-    job = Gaia.launch_job(gaia_str, dump_to_file=True)
+    job = Gaia.launch_job(gaia_str)  # , dump_to_file=True)
     # job = Gaia.launch_job(gaia_str)
     gaia_results_raw = job.get_results()
     # gaia_results_raw['phot_rp_mean_mag'].description
@@ -236,13 +231,14 @@ def get_gaia_data(n_sources=5000):
 
 pleiades_gaia = get_gaia_data()
 
-cols = sorted(df.columns)
-cols
-
 
 # A generic plotter for the two datasets
 def make_plots(survey, save=False):
-    """Make the necessary plots for each dataset."""
+    """Make the necessary plots for each dataset.
+
+    Note that coloring is done basically by the inverse of error, given by:
+    confidence = 1 - (sigma/sigma_max)
+    """
     plt.close()
     print "Beginning plot-making process for " + survey['Survey'] + "..."
 
@@ -250,8 +246,8 @@ def make_plots(survey, save=False):
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
 
     df.plot.scatter('Proper Motion (RA)', 'Proper Motion (Dec)',
-                    ax=axes[0],
-                    c='Confidence', cmap='jet', colorbar=False, alpha=0.5
+                    ax=axes[0], c='Confidence',
+                    cmap='jet', colorbar=False, alpha=0.5
                     )
 
     # ylims = (max(df['Absolute Magnitude']), min(df['Absolute Magnitude']))
@@ -266,6 +262,15 @@ def make_plots(survey, save=False):
     axes[1].annotate(text_str1, survey['text_loc1'], weight='bold')
     axes[1].annotate(text_str2, survey['text_loc2'], weight='bold')
     axes[1].set_ylim(axes[1].get_ylim()[::-1])
+
+    axes[1].set_xticks(np.linspace(min(df['Color']), max(df['Color']), 4))
+    axes[1].set_yticks(np.linspace(min(df['Absolute Magnitude']),
+                                   max(df['Absolute Magnitude']), 4))
+
+    axes[0].set_xticks(np.linspace(min(df['Proper Motion (RA)']),
+                                   max(df['Proper Motion (RA)']), 4))
+    axes[0].set_yticks(np.linspace(min(df['Proper Motion (Dec)']),
+                                   max(df['Proper Motion (Dec)']), 4))
 
     axes[0].set_title('Proper Motions', weight='bold')
     axes[1].set_title('HR Diagram', weight='bold')
