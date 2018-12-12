@@ -3,10 +3,6 @@
 
 import subprocess as sp
 import argparse as ap
-import sys
-
-version = sys.version_info[0]
-python_version = 2 if version == 2 else 3
 
 
 def main():
@@ -59,10 +55,12 @@ def push():
             files.append(f)
             print f
 
-    [sp.call(['git', 'stage', '{}'.format(i)]) for i in files]
+    [sp.call(['git', 'add', '{}'.format(i)]) for i in files]
+    sp.call(['git', 'add', '*.py'])
 
     commit_message = raw_input('Enter commit message:\n')
-
+    commit_message = 'Updated' if commit_message == '' else commit_message
+    print "Committing with commit message of: ", commit_message, '\n\n'
     sp.call(['git', 'commit', '-m', '{}'.format(commit_message)])
     sp.call(['git', 'push'])
 
