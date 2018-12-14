@@ -16,12 +16,12 @@ from astropy.io import fits
 from scipy import stats
 
 colmap = plt.get_cmap('gray') # load gray colormap
+gain = 2.3      # electrons/ADU
 
-
-def get_img_stats(img, plow=1861, phi=2000, plot_field=False, plot_hist=True, save_hist=False):
+def get_img_stats(img, plow=1861, phi=2000, cut_by_std=True, plot_field=False, plot_hist=True, save_field=False, save_hist=False):
     """ Print some statistics about the image.
 
-    img: a 2D image array to plot. I think this has to be 1D?
+    img: A 2D np.ndarray image
     """
     plt.close()
 
@@ -30,24 +30,41 @@ def get_img_stats(img, plow=1861, phi=2000, plot_field=False, plot_hist=True, sa
     imgh = np.reshape(img, nx*ny)
 
     # Cut out bad data (dead/hot pixels)
-    q = np.where((imgh >= plow) & (imgh <= phi))
-    imghcut = imgh[q]
+    if cut_by_std is True:
+        print "Drawing from data in 5-sigma range."
+        im_mean, im_std = np.mean(imgh), np.std(imgh)
+        # Take the most restrictive set possible? I guess?
+        plow = max(plow, im_mean - 5 * im_std)
+        phi = min(phi, im_mean + 5 * im_std)
+        q = np.where((imgh >= plow) & (imgh <= phi))
+        imghcut = imgh[q]
+    else:
+        q = np.where((imgh >= plow) & (imgh <= phi))
+        imghcut = imgh[q]
 
-    print('Image minimum = ', np.nanmin(imghcut))
-    print('Image maximum = ', np.nanmax(imghcut))
-    print('Image mean = ', np.mean(imghcut))
-    print('Image standard deviation = ', np.std(imghcut))
 
-    if plot_field is True:
+    print 'Image minimum = ', np.nanmin(imghcut)
+    print 'Image maximum = ', np.nanmax(imghcut)
+    print 'Image mean = ', np.mean(imghcut)
+    print 'Image standard deviation = ', np.std(imghcut)
+
+
+    if plot_field is True or save_field is True:
         plt.imshow(img, cmap=colmap)
-        plt.show()
+        if save_field is True:
+            name = raw_input('Please enter ouput name ([]-field.pdf): ')
+            print "Saving histogram as " + name + ".pdf"
+            plt.savefig(name + '-field.pdf')
+        if plot_field is True:
+            plt.show()
 
     if plot_hist is True or save_hist is True:
         plt.figure(2)
         plt.hist(imghcut, bins=100, histtype='stepfilled')
         if save_hist is True:
-            # name = raw_input('Please enter ouput name: ')
-            plt.savefig('img_hist.pdf')
+            name = raw_input('Please enter ouput name([]-hist.pdf): ')
+            print "Saving histogram as " + name + ".pdf"
+            plt.savefig(name + '-hist.pdf')
         if plot_hist is True:
             plt.show()
 
@@ -56,20 +73,20 @@ def get_img_stats(img, plow=1861, phi=2000, plot_field=False, plot_hist=True, sa
 
 
 # DO DATA STUFF
-# Read in the file
-img = fits.open("/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/bias/bias_-5deg.fits")[0].data
+basepath = "/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/"
 
-get_img_stats(img, plow=1861, phi=2000, plot_field=True)
+img = fits.open(basepath + "bias/bias_-5deg.fits")[0].data
+get_img_stats(img, plow=0, phi=5000, plot_field=False, save_hist=False)
 
 
 # DIFFIMAGE Stuff
-img1 = fits.open("/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/bias/bias1_0deg.fits")[0].data
-img2 = fits.open("/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/bias/bias2_0deg.fits")[0].data
-img_diff = img1 - img2
-
+img1 = fits.open(basepath + "bias/bias1_0deg.fits")[0].data
+img2 = fits.open(basepath + "bias/bias2_0deg.fits")[0].data
+diff = img1 - img2
 # Shouldn't some of these be negative?
 # Maybe should be removing outliers before diff'ing
-get_img_stats(img_diff, plow=-100, phi=100, plot_field=True)
+
+get_img_stats(diff, plow=-100, phi=100, cut_by_std=True, plot_hist=True, plot_field=True, save_field=False, save_hist=False)
 
 
 """
@@ -92,7 +109,9 @@ gain = 'something'
 # DARK CURRENT vs. TIME
 def darktime():
 
-    basepath = "/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/"
+    # basepath = "/Volumes/1TB Storage Drive/Desktop/masters/Observational-Techniques/dark_current_lab/"
+
+    basepath = './'
 
     # Read in the bias file
     bias = fits.open(basepath + 'darks/dark_0sec_0deg.fits',)[0].data
@@ -112,15 +131,13 @@ def darktime():
     c_median = 0.0*time
     c_rms = 0.0*time
 
-    # wait after each set of plots
-    plt.ioff()
+    # Process the files
 
-    # process the files
+    # Would like to put all these onto one big plot; probably easier that way.
+    # fig, axes = plt.subplots()
     for i in range(len(darkfile)):
       # Read in the file
-      # i = 0
       img = fits.open(darkfile[i])[0].data
-      # print 'Read ', darkfile[i]
 
       diff = img - bias
       nx, ny = diff.shape # find the size of the array
@@ -178,7 +195,7 @@ def darktime():
 
 
 
-darktime()
+# darktime()
 
 
 
